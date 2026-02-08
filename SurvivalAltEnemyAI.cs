@@ -179,14 +179,14 @@ public class SurvivalAltEnemyAI : MonoBehaviour
         if (canTeleport && !isTeleporting && Time.time >= nextTeleportTime && ShouldTeleport(dist, pathComplete))
             StartCoroutine(Teleport());
 
-        bool shouldClimb = heightDelta >= climbHeightThreshold && (shorterPathAvailable || (hasPath && !pathComplete));
+        bool shouldClimb = heightDelta >= climbHeightThreshold && shorterPathAvailable;
         if (canClimb && !isClimbing && Time.time >= nextClimbTime && shouldClimb)
         {
             StartCoroutine(Climb(heightDelta));
             return;
         }
 
-        bool shouldJump = shorterPathAvailable && heightDelta < climbHeightThreshold;
+        bool shouldJump = shorterPathAvailable && heightDelta <= -climbHeightThreshold;
         if (canJump && !isJumping && Time.time >= nextJumpTime && shouldJump)
             StartCoroutine(Jump());
     }
@@ -248,24 +248,21 @@ public class SurvivalAltEnemyAI : MonoBehaviour
         Vector3 climbTarget = new Vector3(transform.position.x, player.position.y, transform.position.z);
         if (NavMesh.SamplePosition(climbTarget, out NavMeshHit hit, 2f, NavMesh.AllAreas))
         {
-            float startOffset = agent.baseOffset;
-            float targetOffset = startOffset + Mathf.Max(heightDelta, climbHeightThreshold);
-            float elapsed = 0f;
+            bool wasStopped = agent.isStopped;
+            agent.isStopped = true;
+            Vector3 target = hit.position;
 
-            while (elapsed < climbDuration)
+            if (climbSpeed > 0f)
             {
-                float t = elapsed / climbDuration;
-                agent.baseOffset = Mathf.Lerp(startOffset, targetOffset, t);
-                elapsed += Time.deltaTime;
-                yield return null;
+                while (Vector3.Distance(transform.position, target) > 0.05f)
+                {
+                    transform.position = Vector3.MoveTowards(transform.position, target, climbSpeed * Time.deltaTime);
+                    yield return null;
+                }
             }
 
-            agent.baseOffset = startOffset;
-            agent.Warp(hit.position);
-        }
-        else
-        {
-            yield return new WaitForSeconds(climbDuration);
+            agent.Warp(target);
+            agent.isStopped = wasStopped;
         }
 
         isClimbing = false;

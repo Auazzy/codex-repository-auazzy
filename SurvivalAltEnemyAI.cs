@@ -113,10 +113,6 @@ public class SurvivalAltEnemyAI : MonoBehaviour
 
         float dist = Vector3.Distance(transform.position, player.position);
 
-        HandleDifficultyScaling();
-
-        if (state == State.Chasing)
-            ChaseUpdate(dist);
         switch (state)
         {
             case State.Chasing:

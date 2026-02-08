@@ -31,14 +31,12 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     // ======================
     [Header("Movement")]
     public float baseRunSpeed = 6.5f;
-    public float speedIncrease = 0.3f;
 
     // ======================
     // ATTACK
     // ======================
     [Header("Attack")]
     public float baseWindup = 1.2f;
-    public float windupDecrease = 0.05f;
     public float attackActiveTime = 0.25f;
     public float attackCooldown = 1.5f;
 
@@ -57,7 +55,7 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     // ======================
     // DIFFICULTY SCALING
     // ======================
-    int lastScaleStep = -1;
+    int lastScaleStep = 0;
 
     // ======================
     // INIT
@@ -91,8 +89,6 @@ public class SurvivalAltEnemyAI : MonoBehaviour
             agent.isStopped = false;
 
         float dist = Vector3.Distance(transform.position, player.position);
-
-        HandleDifficultyScaling();
 
         switch (state)
         {
@@ -175,30 +171,42 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     // ======================
     // DIFFICULTY SCALING
     // ======================
-    void HandleDifficultyScaling()
+    public void ApplyDifficultyScaling(float timeSurvived)
     {
-        float elapsed = Time.timeSinceLevelLoad;
         int difficulty = GameSettings.difficulty;
 
         float interval =
-            difficulty == 0 ? 300f :   // Easy: 5 min
-            difficulty == 1 ? 180f :   // Normal: 3 min
-            difficulty == 2 ? 60f  :   // Hard: 1 min
+            difficulty == 0 ? 900f :   // Easy: 15 min
+            difficulty == 1 ? 450f :   // Normal: 7.5 min
+            difficulty == 2 ? 120f :   // Hard: 2 min
                               30f;    // Insane: 30 sec
 
-        int step = Mathf.FloorToInt(elapsed / interval);
+        float windupDecrease =
+            difficulty == 0 ? 0.01f :
+            difficulty == 1 ? 0.025f :
+            difficulty == 2 ? 0.035f :
+                              0.05f;
 
-        if (step == lastScaleStep)
+        float speedIncrease =
+            difficulty == 0 ? 1f :
+            difficulty == 1 ? 1.5f :
+            difficulty == 2 ? 2.25f :
+                              2.75f;
+
+        int step = Mathf.FloorToInt(timeSurvived / interval);
+
+        if (step <= lastScaleStep)
             return;
 
+        int stepsToApply = step - lastScaleStep;
+        for (int i = 0; i < stepsToApply; i++)
+        {
+            baseRunSpeed += speedIncrease;
+            baseWindup = Mathf.Max(0.3f, baseWindup - windupDecrease);
+        }
+
         lastScaleStep = step;
-
-        // Speed scales cleanly (no Mach 5 spawn)
-        baseRunSpeed += speedIncrease;
         agent.speed = baseRunSpeed;
-
-        // Windup gets faster but never broken
-        baseWindup = Mathf.Max(0.3f, baseWindup - windupDecrease);
     }
 
     // ======================

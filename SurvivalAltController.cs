@@ -149,8 +149,46 @@ public class SurvivalAltController : MonoBehaviour
         if (enemyAI == null)
             return;
 
+        enemyAI.ApplyDifficultyScaling(timeSurvived);
+
         float minutes = timeSurvived / 60f;
         int difficulty = GameSettings.difficulty;
+
+        if (difficulty == 2)
+        {
+            if (!jumpUnlocked && minutes >= 20f)
+            {
+                enemyAI.UnlockAbility(SurvivalAltEnemyAI.EnemyAbilityType.Jump);
+                jumpUnlocked = true;
+            }
+
+            if (!climbUnlocked && minutes >= 30f)
+            {
+                enemyAI.UnlockAbility(SurvivalAltEnemyAI.EnemyAbilityType.Climb);
+                climbUnlocked = true;
+            }
+        }
+
+        if (difficulty == 3)
+        {
+            if (!jumpUnlocked && minutes >= 5f)
+            {
+                enemyAI.UnlockAbility(SurvivalAltEnemyAI.EnemyAbilityType.Jump);
+                jumpUnlocked = true;
+            }
+
+            if (!climbUnlocked && minutes >= 7.5f)
+            {
+                enemyAI.UnlockAbility(SurvivalAltEnemyAI.EnemyAbilityType.Climb);
+                climbUnlocked = true;
+            }
+
+            if (!teleportUnlocked && minutes >= 10f)
+            {
+                enemyAI.UnlockAbility(SurvivalAltEnemyAI.EnemyAbilityType.Teleport);
+                teleportUnlocked = true;
+            }
+        }
     }
 
     // =========================

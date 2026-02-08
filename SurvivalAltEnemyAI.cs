@@ -60,8 +60,9 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     [Header("Ability Settings")]
     public float jumpHeight = 1.25f;
     public float jumpDuration = 0.35f;
+    public float jumpForwardMaxDistance = 15f;
     public float jumpCooldown = 4f;
-    public float climbDuration = 0.6f;
+    public float climbSpeed = 4f;
     public float climbHeightThreshold = 1.2f;
     public float climbCooldown = 5f;
     public float teleportMinDistance = 10f;
@@ -170,63 +171,116 @@ public class SurvivalAltEnemyAI : MonoBehaviour
 
     void TryUseAbilities(float dist)
     {
-        if (canTeleport && !isTeleporting && Time.time >= nextTeleportTime && dist >= teleportMinDistance)
+        float heightDelta = player.position.y - transform.position.y;
+        bool hasPath = TryGetPathToPlayer(out float pathLength, out bool pathComplete);
+        bool shorterPathAvailable = hasPath && pathComplete && pathLength > dist * 1.25f;
+
+        if (canTeleport && !isTeleporting && Time.time >= nextTeleportTime && ShouldTeleport(dist, pathComplete))
             StartCoroutine(Teleport());
 
-        if (canJump && !isJumping && Time.time >= nextJumpTime && dist > attackRange)
-            StartCoroutine(Jump());
+        bool shouldClimb = heightDelta >= climbHeightThreshold && (shorterPathAvailable || !hasPath || !pathComplete);
+        if (canClimb && !isClimbing && Time.time >= nextClimbTime && shouldClimb)
+        {
+            StartCoroutine(Climb());
+            return;
+        }
 
-        float heightDelta = player.position.y - transform.position.y;
-        if (canClimb && !isClimbing && Time.time >= nextClimbTime && heightDelta >= climbHeightThreshold)
-            StartCoroutine(Climb(heightDelta));
+        bool shouldJump = (shorterPathAvailable || !hasPath || !pathComplete) && heightDelta < climbHeightThreshold;
+        if (canJump && !isJumping && Time.time >= nextJumpTime && shouldJump)
+            StartCoroutine(Jump());
+    }
+
+    bool TryGetPathToPlayer(out float pathLength, out bool pathComplete)
+    {
+        pathLength = 0f;
+        pathComplete = false;
+
+        if (player == null || !agent.isOnNavMesh)
+            return false;
+
+        NavMeshPath path = new NavMeshPath();
+        if (!agent.CalculatePath(player.position, path))
+            return false;
+
+        pathComplete = path.status == NavMeshPathStatus.PathComplete;
+        if (path.corners.Length < 2)
+            return true;
+
+        for (int i = 1; i < path.corners.Length; i++)
+            pathLength += Vector3.Distance(path.corners[i - 1], path.corners[i]);
+
+        return true;
+    }
+
+    bool ShouldTeleport(float dist, bool pathComplete)
+    {
+        bool farFromPlayer = dist >= teleportMinDistance;
+        bool closeForConfuse = dist <= attackRange * 1.25f;
+        bool blockedPath = !pathComplete;
+        return farFromPlayer || closeForConfuse || blockedPath;
     }
 
     IEnumerator Jump()
     {
         isJumping = true;
         nextJumpTime = Time.time + jumpCooldown;
+        agent.isStopped = true;
+        agent.ResetPath();
         float startOffset = agent.baseOffset;
+        Vector3 startPosition = transform.position;
+        Vector3 toPlayer = player.position - startPosition;
+        Vector3 flatDirection = new Vector3(toPlayer.x, 0f, toPlayer.z);
+        if (flatDirection == Vector3.zero)
+            flatDirection = transform.forward;
+
+        float desiredDistance = Mathf.Clamp(flatDirection.magnitude * 0.75f, attackRange, jumpForwardMaxDistance);
+        Vector3 desiredLanding = startPosition + flatDirection.normalized * desiredDistance;
+        Vector3 landingPosition = desiredLanding;
+
+        if (NavMesh.SamplePosition(desiredLanding, out NavMeshHit hit, 6f, NavMesh.AllAreas))
+            landingPosition = hit.position;
+
         float elapsed = 0f;
 
         while (elapsed < jumpDuration)
         {
             float t = elapsed / jumpDuration;
             float arc = Mathf.Sin(t * Mathf.PI);
+            Vector3 jumpPosition = Vector3.Lerp(startPosition, landingPosition, t);
+            agent.Warp(jumpPosition);
             agent.baseOffset = startOffset + arc * jumpHeight;
             elapsed += Time.deltaTime;
             yield return null;
         }
 
         agent.baseOffset = startOffset;
+        agent.Warp(landingPosition);
+        agent.isStopped = false;
         isJumping = false;
     }
 
-    IEnumerator Climb(float heightDelta)
+    IEnumerator Climb()
     {
         isClimbing = true;
         nextClimbTime = Time.time + climbCooldown;
-        Vector3 climbTarget = new Vector3(transform.position.x, player.position.y, transform.position.z);
-        if (NavMesh.SamplePosition(climbTarget, out NavMeshHit hit, 2f, NavMesh.AllAreas))
+        agent.isStopped = true;
+        agent.ResetPath();
+        Vector3 climbTarget = player.position;
+        bool foundTarget = NavMesh.SamplePosition(climbTarget, out NavMeshHit hit, 6f, NavMesh.AllAreas);
+        float targetHeight = foundTarget ? hit.position.y : player.position.y;
+        float startOffset = agent.baseOffset;
+        float targetOffset = startOffset + Mathf.Max(targetHeight - transform.position.y, climbHeightThreshold);
+
+        while (agent.baseOffset < targetOffset)
         {
-            float startOffset = agent.baseOffset;
-            float targetOffset = startOffset + Mathf.Max(heightDelta, climbHeightThreshold);
-            float elapsed = 0f;
+            agent.baseOffset = Mathf.MoveTowards(agent.baseOffset, targetOffset, climbSpeed * Time.deltaTime);
+            yield return null;
+        }
 
-            while (elapsed < climbDuration)
-            {
-                float t = elapsed / climbDuration;
-                agent.baseOffset = Mathf.Lerp(startOffset, targetOffset, t);
-                elapsed += Time.deltaTime;
-                yield return null;
-            }
-
-            agent.baseOffset = startOffset;
+        agent.baseOffset = startOffset;
+        if (foundTarget)
             agent.Warp(hit.position);
-        }
-        else
-        {
-            yield return new WaitForSeconds(climbDuration);
-        }
+        agent.isStopped = false;
 
         isClimbing = false;
     }
@@ -235,18 +289,57 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     {
         isTeleporting = true;
         nextTeleportTime = Time.time + teleportCooldown;
-        Vector3 direction = (transform.position - player.position).normalized;
-        if (direction == Vector3.zero)
-            direction = -player.forward;
 
-        float distance = Random.Range(teleportMinDistance, teleportMaxDistance);
-        Vector3 target = player.position + direction * distance;
+        float currentDist = Vector3.Distance(transform.position, player.position);
+        bool getCloser = currentDist > attackRange * 1.5f;
+        Vector3 target;
 
-        if (NavMesh.SamplePosition(target, out NavMeshHit hit, 4f, NavMesh.AllAreas))
-            agent.Warp(hit.position);
+        if (getCloser)
+        {
+            Vector3 toEnemy = (transform.position - player.position).normalized;
+            if (toEnemy == Vector3.zero)
+                toEnemy = -player.forward;
+
+            float desiredDistance = Mathf.Clamp(currentDist * 0.5f, attackRange * 0.75f, teleportMaxDistance);
+            target = player.position + toEnemy * desiredDistance;
+        }
+        else
+        {
+            float randomDistance = Mathf.Clamp(Random.Range(teleportMinDistance * 0.5f, teleportMaxDistance), attackRange, teleportMaxDistance);
+            Vector2 offset2D = Random.insideUnitCircle.normalized * randomDistance;
+            target = player.position + new Vector3(offset2D.x, 0f, offset2D.y);
+        }
+
+        if (TryFindTeleportTarget(target, out Vector3 finalTarget))
+            agent.Warp(finalTarget);
 
         yield return null;
         isTeleporting = false;
+    }
+
+    bool TryFindTeleportTarget(Vector3 desiredTarget, out Vector3 finalTarget)
+    {
+        const int maxAttempts = 6;
+        const float sampleRadius = 6f;
+
+        for (int i = 0; i < maxAttempts; i++)
+        {
+            Vector3 candidate = desiredTarget;
+            if (i > 0)
+            {
+                Vector2 jitter = Random.insideUnitCircle * sampleRadius;
+                candidate += new Vector3(jitter.x, 0f, jitter.y);
+            }
+
+            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, sampleRadius, NavMesh.AllAreas))
+            {
+                finalTarget = hit.position;
+                return true;
+            }
+        }
+
+        finalTarget = transform.position;
+        return false;
     }
 
     // ======================

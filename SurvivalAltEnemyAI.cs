@@ -60,8 +60,9 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     [Header("Ability Settings")]
     public float jumpHeight = 1.25f;
     public float jumpDuration = 0.35f;
+    public float jumpForwardMaxDistance = 15f;
     public float jumpCooldown = 4f;
-    public float climbDuration = 0.6f;
+    public float climbSpeed = 4f;
     public float climbHeightThreshold = 1.2f;
     public float climbCooldown = 5f;
     public float teleportMinDistance = 10f;

@@ -22,6 +22,8 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     [Header("References")]
     public NavMeshAgent agent;
     public Collider attackHitbox; // child object
+    public AudioSource audioSource;
+    public AudioClip abilityUnlockCue;
 
     private Transform player;
     private State state;
@@ -51,6 +53,24 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     bool canJump;
     bool canClimb;
     bool canTeleport;
+    bool isJumping;
+    bool isClimbing;
+    bool isTeleporting;
+
+    [Header("Ability Settings")]
+    public float jumpHeight = 1.25f;
+    public float jumpDuration = 0.35f;
+    public float jumpCooldown = 4f;
+    public float climbDuration = 0.6f;
+    public float climbHeightThreshold = 1.2f;
+    public float climbCooldown = 5f;
+    public float teleportMinDistance = 10f;
+    public float teleportMaxDistance = 20f;
+    public float teleportCooldown = 8f;
+
+    float nextJumpTime;
+    float nextClimbTime;
+    float nextTeleportTime;
 
     // ======================
     // DIFFICULTY SCALING
@@ -73,6 +93,9 @@ public class SurvivalAltEnemyAI : MonoBehaviour
         if (attackHitbox != null)
             attackHitbox.enabled = false;
 
+        if (audioSource == null)
+            audioSource = GetComponent<AudioSource>();
+
         agent.isStopped = false;
         agent.speed = baseRunSpeed;
 
@@ -90,6 +113,10 @@ public class SurvivalAltEnemyAI : MonoBehaviour
 
         float dist = Vector3.Distance(transform.position, player.position);
 
+        HandleDifficultyScaling();
+
+        if (state == State.Chasing)
+            ChaseUpdate(dist);
         switch (state)
         {
             case State.Chasing:
@@ -108,6 +135,7 @@ public class SurvivalAltEnemyAI : MonoBehaviour
     void ChaseUpdate(float dist)
     {
         agent.SetDestination(player.position);
+        TryUseAbilities(dist);
 
         if (dist <= attackRange && canAttack)
         {
@@ -144,6 +172,87 @@ public class SurvivalAltEnemyAI : MonoBehaviour
         canAttack = true;
     }
 
+    void TryUseAbilities(float dist)
+    {
+        if (canTeleport && !isTeleporting && Time.time >= nextTeleportTime && dist >= teleportMinDistance)
+            StartCoroutine(Teleport());
+
+        if (canJump && !isJumping && Time.time >= nextJumpTime && dist > attackRange)
+            StartCoroutine(Jump());
+
+        float heightDelta = player.position.y - transform.position.y;
+        if (canClimb && !isClimbing && Time.time >= nextClimbTime && heightDelta >= climbHeightThreshold)
+            StartCoroutine(Climb(heightDelta));
+    }
+
+    IEnumerator Jump()
+    {
+        isJumping = true;
+        nextJumpTime = Time.time + jumpCooldown;
+        float startOffset = agent.baseOffset;
+        float elapsed = 0f;
+
+        while (elapsed < jumpDuration)
+        {
+            float t = elapsed / jumpDuration;
+            float arc = Mathf.Sin(t * Mathf.PI);
+            agent.baseOffset = startOffset + arc * jumpHeight;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        agent.baseOffset = startOffset;
+        isJumping = false;
+    }
+
+    IEnumerator Climb(float heightDelta)
+    {
+        isClimbing = true;
+        nextClimbTime = Time.time + climbCooldown;
+        Vector3 climbTarget = new Vector3(transform.position.x, player.position.y, transform.position.z);
+        if (NavMesh.SamplePosition(climbTarget, out NavMeshHit hit, 2f, NavMesh.AllAreas))
+        {
+            float startOffset = agent.baseOffset;
+            float targetOffset = startOffset + Mathf.Max(heightDelta, climbHeightThreshold);
+            float elapsed = 0f;
+
+            while (elapsed < climbDuration)
+            {
+                float t = elapsed / climbDuration;
+                agent.baseOffset = Mathf.Lerp(startOffset, targetOffset, t);
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            agent.baseOffset = startOffset;
+            agent.Warp(hit.position);
+        }
+        else
+        {
+            yield return new WaitForSeconds(climbDuration);
+        }
+
+        isClimbing = false;
+    }
+
+    IEnumerator Teleport()
+    {
+        isTeleporting = true;
+        nextTeleportTime = Time.time + teleportCooldown;
+        Vector3 direction = (transform.position - player.position).normalized;
+        if (direction == Vector3.zero)
+            direction = -player.forward;
+
+        float distance = Random.Range(teleportMinDistance, teleportMaxDistance);
+        Vector3 target = player.position + direction * distance;
+
+        if (NavMesh.SamplePosition(target, out NavMeshHit hit, 4f, NavMesh.AllAreas))
+            agent.Warp(hit.position);
+
+        yield return null;
+        isTeleporting = false;
+    }
+
     // ======================
     // ABILITY UNLOCK API
     // ======================
@@ -154,18 +263,27 @@ public class SurvivalAltEnemyAI : MonoBehaviour
             case EnemyAbilityType.Jump:
                 canJump = true;
                 Debug.Log("Enemy unlocked JUMP");
+                PlayUnlockCue();
                 break;
 
             case EnemyAbilityType.Climb:
                 canClimb = true;
                 Debug.Log("Enemy unlocked CLIMB");
+                PlayUnlockCue();
                 break;
 
             case EnemyAbilityType.Teleport:
                 canTeleport = true;
                 Debug.Log("Enemy unlocked TELEPORT");
+                PlayUnlockCue();
                 break;
         }
+    }
+
+    void PlayUnlockCue()
+    {
+        if (audioSource != null && abilityUnlockCue != null)
+            audioSource.PlayOneShot(abilityUnlockCue);
     }
 
     // ======================

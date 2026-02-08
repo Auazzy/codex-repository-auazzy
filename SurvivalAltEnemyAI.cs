@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.AI;
 
 public class SurvivalAltEnemyAI : MonoBehaviour

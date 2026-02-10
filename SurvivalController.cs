@@ -17,14 +17,6 @@ public class SurvivalController : MonoBehaviour
         public int magazineSize;
         public int reserveSize;
         public int ammoCostPerUnit;
-        public int sellValue = 50;
-    }
-
-    [Serializable]
-    public class WeaponVisualEntry
-    {
-        public string weaponName;
-        public GameObject weaponPrefab;
     }
 
     public enum WeaponCategory
@@ -62,6 +54,9 @@ public class SurvivalController : MonoBehaviour
         public int bossKillReward;
     }
 
+    // =========================
+    // UI
+    // =========================
     [Header("UI")]
     public GameObject survivalUIRoot;
     public TMP_Text objectiveText;
@@ -70,35 +65,40 @@ public class SurvivalController : MonoBehaviour
     public TMP_Text intermissionText;
     public Image healthFillImage;
     public GameObject shopUIRoot;
-    public Transform confettiUIParent;
 
+    // =========================
+    // SPAWNS
+    // =========================
     [Header("Spawning")]
     public Transform enemySpawnsParent;
     public Transform crateSpawnsParent;
     public GameObject cratePrefab;
 
+    // =========================
+    // WAVES
+    // =========================
     [Header("Waves")]
     public List<WaveDefinition> waves = new List<WaveDefinition>();
     public float intermissionDuration = 45f;
 
+    // =========================
+    // CURRENCY
+    // =========================
     [Header("Currency")]
     public int hitCoinMin = 3;
     public int hitCoinMax = 5;
 
+    // =========================
+    // SHOP
+    // =========================
     [Header("Shop")]
     public List<WeaponOffer> weaponOffers = new List<WeaponOffer>();
 
-    [Header("Weapon Visuals")]
-    public Transform weaponHoldPoint;
-    public List<WeaponVisualEntry> weaponVisuals = new List<WeaponVisualEntry>();
-
-    [Header("Audio")]
-    public AudioSource musicSource;
-    public AudioClip intermissionMusic;
-    public List<AudioClip> waveMusic = new List<AudioClip>();
-
+    // =========================
+    // VICTORY
+    // =========================
     [Header("Victory")]
-    public GameObject confettiUIPrefab;
+    public GameObject confettiPrefab;
 
     private int currentWaveIndex = -1;
     private int aliveEnemies;
@@ -110,14 +110,10 @@ public class SurvivalController : MonoBehaviour
     private float intermissionRemaining;
     private SurvivalSupplyCrate activeCrate;
     private Coroutine objectiveRoutine;
-    private readonly List<string> ownedWeapons = new List<string>();
-    private string equippedWeaponName;
-    private GameObject equippedWeaponVisual;
 
-    public int Coins => coins;
-    public float CurrentHealth => currentHealth;
-    public float MaxHealth => maxHealth;
-
+    // =========================
+    // INIT
+    // =========================
     void OnEnable()
     {
         if (GameSettings.gamemode != 1)
@@ -147,10 +143,6 @@ public class SurvivalController : MonoBehaviour
     void StartSurvival()
     {
         coins = 0;
-        currentHealth = maxHealth;
-        ownedWeapons.Clear();
-        EquipStarterLoadout();
-
         UpdateCoinsUI();
         UpdateHealthUI();
         currentWaveIndex = -1;
@@ -159,6 +151,9 @@ public class SurvivalController : MonoBehaviour
         StartNextWave();
     }
 
+    // =========================
+    // UPDATE
+    // =========================
     void Update()
     {
         if (intermissionRunning)
@@ -180,6 +175,9 @@ public class SurvivalController : MonoBehaviour
         UpdateIntermissionUI();
     }
 
+    // =========================
+    // WAVES
+    // =========================
     void StartNextWave()
     {
         if (currentWaveIndex + 1 >= waves.Count)
@@ -193,7 +191,7 @@ public class SurvivalController : MonoBehaviour
 
         UpdateWaveUI();
         ShowObjective($"Wave {currentWaveIndex + 1} started.");
-        PlayWaveMusic(currentWaveIndex);
+
         SpawnWave(wave);
     }
 
@@ -222,7 +220,9 @@ public class SurvivalController : MonoBehaviour
 
         for (int i = 0; i < spawn.count; i++)
         {
-            Transform spawnPoint = enemySpawnsParent.GetChild(UnityEngine.Random.Range(0, enemySpawnsParent.childCount));
+            Transform spawnPoint = enemySpawnsParent.GetChild(
+                UnityEngine.Random.Range(0, enemySpawnsParent.childCount));
+
             GameObject enemy = Instantiate(spawn.prefab, spawnPoint.position, spawnPoint.rotation);
             RegisterSpawnedEnemy(enemy, spawn.killReward);
         }
@@ -233,7 +233,9 @@ public class SurvivalController : MonoBehaviour
         if (bossPrefab == null || enemySpawnsParent == null || enemySpawnsParent.childCount == 0)
             return;
 
-        Transform spawnPoint = enemySpawnsParent.GetChild(UnityEngine.Random.Range(0, enemySpawnsParent.childCount));
+        Transform spawnPoint = enemySpawnsParent.GetChild(
+            UnityEngine.Random.Range(0, enemySpawnsParent.childCount));
+
         GameObject boss = Instantiate(bossPrefab, spawnPoint.position, spawnPoint.rotation);
         RegisterSpawnedEnemy(boss, killReward);
     }
@@ -250,10 +252,6 @@ public class SurvivalController : MonoBehaviour
             tracker = enemy.AddComponent<SurvivalEnemyTracker>();
 
         tracker.Initialize(this, killReward);
-
-        SurvivalEnemyAI ai = enemy.GetComponent<SurvivalEnemyAI>();
-        if (ai != null)
-            ai.SetSurvivalController(this);
     }
 
     public void OnEnemyDestroyed(int killReward)
@@ -288,13 +286,42 @@ public class SurvivalController : MonoBehaviour
         intermissionRunning = true;
         intermissionRemaining = intermissionDuration;
         SpawnSupplyCrate();
-        PlayIntermissionMusic();
         ShowObjective("Intermission started. Find the supply crate.");
         UpdateIntermissionUI();
         if (intermissionText != null)
             intermissionText.gameObject.SetActive(true);
     }
 
+    void UpdateWaveUI()
+    {
+        if (waveText == null)
+            return;
+
+        string label = waves.Count > currentWaveIndex && currentWaveIndex >= 0
+            ? waves[currentWaveIndex].label
+            : "Wave";
+
+        waveText.text = $"{label} (Wave {currentWaveIndex + 1}/{waves.Count})";
+    }
+
+    void UpdateIntermissionUI()
+    {
+        if (intermissionText == null)
+            return;
+
+        int seconds = Mathf.CeilToInt(intermissionRemaining);
+        intermissionText.text = $"Next wave in {seconds}s";
+    }
+
+    void HideIntermission()
+    {
+        if (intermissionText != null)
+            intermissionText.gameObject.SetActive(false);
+    }
+
+    // =========================
+    // SUPPLY CRATE
+    // =========================
     void SpawnSupplyCrate()
     {
         if (cratePrefab == null || crateSpawnsParent == null || crateSpawnsParent.childCount == 0)
@@ -303,7 +330,8 @@ public class SurvivalController : MonoBehaviour
             return;
         }
 
-        Transform spawn = crateSpawnsParent.GetChild(UnityEngine.Random.Range(0, crateSpawnsParent.childCount));
+        Transform spawn = crateSpawnsParent.GetChild(
+            UnityEngine.Random.Range(0, crateSpawnsParent.childCount));
 
         GameObject crateObject = Instantiate(cratePrefab, spawn.position, spawn.rotation);
         activeCrate = crateObject.GetComponent<SurvivalSupplyCrate>();
@@ -336,103 +364,9 @@ public class SurvivalController : MonoBehaviour
         return weaponOffers;
     }
 
-    public bool BuyWeapon(string weaponName)
-    {
-        WeaponOffer offer = GetOffer(weaponName);
-        if (offer == null)
-            return false;
-
-        if (!TrySpendCoins(offer.cost))
-            return false;
-
-        if (!ownedWeapons.Contains(weaponName))
-            ownedWeapons.Add(weaponName);
-
-        EquipWeapon(weaponName);
-        return true;
-    }
-
-    public bool SellWeapon(string weaponName)
-    {
-        if (weaponName == "R-19" || weaponName == "Knife")
-            return false;
-
-        WeaponOffer offer = GetOffer(weaponName);
-        if (offer == null || !ownedWeapons.Contains(weaponName))
-            return false;
-
-        ownedWeapons.Remove(weaponName);
-        AddCoins(Mathf.Max(0, offer.sellValue));
-
-        if (equippedWeaponName == weaponName)
-            EquipWeapon(ownedWeapons.Count > 0 ? ownedWeapons[0] : "R-19");
-
-        return true;
-    }
-
-    public void EquipWeapon(string weaponName)
-    {
-        equippedWeaponName = weaponName;
-        RefreshWeaponVisual();
-    }
-
-    void EquipStarterLoadout()
-    {
-        if (!ownedWeapons.Contains("R-19"))
-            ownedWeapons.Add("R-19");
-
-        if (!ownedWeapons.Contains("Knife"))
-            ownedWeapons.Add("Knife");
-
-        EquipWeapon("R-19");
-    }
-
-    void RefreshWeaponVisual()
-    {
-        if (equippedWeaponVisual != null)
-            Destroy(equippedWeaponVisual);
-
-        if (weaponHoldPoint == null)
-            return;
-
-        WeaponVisualEntry entry = weaponVisuals.Find(v => v.weaponName == equippedWeaponName);
-        if (entry == null || entry.weaponPrefab == null)
-            return;
-
-        equippedWeaponVisual = Instantiate(entry.weaponPrefab, weaponHoldPoint);
-        equippedWeaponVisual.transform.localPosition = Vector3.zero;
-        equippedWeaponVisual.transform.localRotation = Quaternion.identity;
-    }
-
-    WeaponOffer GetOffer(string weaponName)
-    {
-        return weaponOffers.Find(o => o.weaponName == weaponName);
-    }
-
-    void PlayWaveMusic(int waveIndex)
-    {
-        if (musicSource == null || waveMusic.Count == 0)
-            return;
-
-        AudioClip clip = waveMusic[Mathf.Clamp(waveIndex, 0, waveMusic.Count - 1)];
-        if (clip == null)
-            return;
-
-        musicSource.loop = true;
-        musicSource.clip = clip;
-        musicSource.Play();
-    }
-
-    void PlayIntermissionMusic()
-    {
-        if (musicSource == null || intermissionMusic == null)
-            return;
-
-        musicSource.loop = true;
-        musicSource.clip = intermissionMusic;
-        musicSource.Play();
-    }
-
+    // =========================
+    // CURRENCY & HEALTH
+    // =========================
     public void AddCoins(int amount)
     {
         coins = Mathf.Max(0, coins + amount);
@@ -455,28 +389,18 @@ public class SurvivalController : MonoBehaviour
         return true;
     }
 
-    public void DamagePlayer(float amount)
+    public void SetHealth(float current, float max)
     {
-        currentHealth = Mathf.Max(0f, currentHealth - Mathf.Max(0f, amount));
+        maxHealth = Mathf.Max(1f, max);
+        currentHealth = Mathf.Clamp(current, 0f, maxHealth);
         UpdateHealthUI();
-
-        if (currentHealth <= 0f)
-            StartCoroutine(GameOverRoutine());
     }
 
-    public int HealMissingHealth(int costPerHealthPoint)
+    public int GetHealCost(int desiredHeal, int costPerPoint)
     {
         int missing = Mathf.RoundToInt(maxHealth - currentHealth);
-        if (missing <= 0)
-            return 0;
-
-        int totalCost = missing * Mathf.Max(1, costPerHealthPoint);
-        if (!TrySpendCoins(totalCost))
-            return 0;
-
-        currentHealth = maxHealth;
-        UpdateHealthUI();
-        return totalCost;
+        int healAmount = Mathf.Clamp(desiredHeal, 0, missing);
+        return healAmount * Mathf.Max(1, costPerPoint);
     }
 
     public int GetAmmoCost(WeaponOffer offer, int missingInMag, int missingInReserve)
@@ -505,33 +429,9 @@ public class SurvivalController : MonoBehaviour
         healthFillImage.fillAmount = maxHealth <= 0f ? 0f : currentHealth / maxHealth;
     }
 
-    void UpdateWaveUI()
-    {
-        if (waveText == null)
-            return;
-
-        string label = waves.Count > currentWaveIndex && currentWaveIndex >= 0
-            ? waves[currentWaveIndex].label
-            : "Wave";
-
-        waveText.text = $"{label} (Wave {currentWaveIndex + 1}/{waves.Count})";
-    }
-
-    void UpdateIntermissionUI()
-    {
-        if (intermissionText == null)
-            return;
-
-        int seconds = Mathf.CeilToInt(intermissionRemaining);
-        intermissionText.text = $"Next wave in {seconds}s";
-    }
-
-    void HideIntermission()
-    {
-        if (intermissionText != null)
-            intermissionText.gameObject.SetActive(false);
-    }
-
+    // =========================
+    // OBJECTIVE UI
+    // =========================
     void ShowObjective(string message)
     {
         if (objectiveRoutine != null)
@@ -551,35 +451,23 @@ public class SurvivalController : MonoBehaviour
         objectiveText.gameObject.SetActive(false);
     }
 
+    // =========================
+    // VICTORY
+    // =========================
     IEnumerator HandleVictory()
     {
         ShowObjective("Boss defeated!");
 
-        if (confettiUIPrefab != null)
-        {
-            if (confettiUIParent != null)
-                Instantiate(confettiUIPrefab, confettiUIParent, false);
-            else
-                Instantiate(confettiUIPrefab);
-        }
-
-        if (musicSource != null)
-            musicSource.Stop();
+        if (confettiPrefab != null)
+            Instantiate(confettiPrefab, Vector3.zero, Quaternion.identity);
 
         yield return new WaitForSeconds(10f);
         SceneManager.LoadScene("MainMenu");
     }
 
-    IEnumerator GameOverRoutine()
-    {
-        ShowObjective("You died!");
-        if (musicSource != null)
-            musicSource.Stop();
-
-        yield return new WaitForSeconds(2.5f);
-        SceneManager.LoadScene("MainMenu");
-    }
-
+    // =========================
+    // DEFAULT DATA
+    // =========================
     void Reset()
     {
         waves = new List<WaveDefinition>
@@ -593,29 +481,29 @@ public class SurvivalController : MonoBehaviour
             new WaveDefinition { label = "Berserker Newborns" },
             new WaveDefinition { label = "Miniboss Wave" },
             new WaveDefinition { label = "Endurance Wave" },
-            new WaveDefinition { label = "Boss", bossWave = true }
+            new WaveDefinition { label = "Boss" , bossWave = true }
         };
 
         weaponOffers = new List<WeaponOffer>
         {
-            new WeaponOffer { weaponName = "R-19", cost = 100, category = WeaponCategory.Pistol, ammoCostPerUnit = 1 },
-            new WeaponOffer { weaponName = "Knife", cost = 100, category = WeaponCategory.Melee, ammoCostPerUnit = 0 },
-            new WeaponOffer { weaponName = "R-19S", cost = 150, category = WeaponCategory.Pistol, ammoCostPerUnit = 1 },
-            new WeaponOffer { weaponName = "Machete", cost = 200, category = WeaponCategory.Melee, ammoCostPerUnit = 0 },
-            new WeaponOffer { weaponName = "Fireaxe", cost = 300, category = WeaponCategory.Melee, ammoCostPerUnit = 0 },
-            new WeaponOffer { weaponName = "M12C", cost = 500, category = WeaponCategory.Shotgun, ammoCostPerUnit = 4 },
-            new WeaponOffer { weaponName = "VZ-9", cost = 500, category = WeaponCategory.MachinePistol, ammoCostPerUnit = 2 },
-            new WeaponOffer { weaponName = "GL-6", cost = 625, category = WeaponCategory.GrenadeLauncher, ammoCostPerUnit = 6 },
-            new WeaponOffer { weaponName = "R44-C", cost = 700, category = WeaponCategory.Revolver, ammoCostPerUnit = 3 },
-            new WeaponOffer { weaponName = "M870A", cost = 750, category = WeaponCategory.Shotgun, ammoCostPerUnit = 4 },
-            new WeaponOffer { weaponName = "MP-5C", cost = 750, category = WeaponCategory.SubmachineGun, ammoCostPerUnit = 2 },
-            new WeaponOffer { weaponName = "Katana", cost = 850, category = WeaponCategory.Melee, ammoCostPerUnit = 0 },
-            new WeaponOffer { weaponName = "M40R", cost = 1000, category = WeaponCategory.SniperRifle, ammoCostPerUnit = 4 },
-            new WeaponOffer { weaponName = "AK-R", cost = 1250, category = WeaponCategory.AssaultRifle, ammoCostPerUnit = 3 },
-            new WeaponOffer { weaponName = "SPMG-249", cost = 1250, category = WeaponCategory.SupportMachineGun, ammoCostPerUnit = 3 },
-            new WeaponOffer { weaponName = "RPL-7", cost = 1250, category = WeaponCategory.RocketLauncher, ammoCostPerUnit = 8 },
-            new WeaponOffer { weaponName = "MK27R", cost = 1500, category = WeaponCategory.AssaultRifle, ammoCostPerUnit = 4 },
-            new WeaponOffer { weaponName = "SAW-12C", cost = 2000, category = WeaponCategory.FuelMelee, ammoCostPerUnit = 5 }
+            new WeaponOffer { weaponName = "R-19", cost = 100, category = WeaponCategory.Pistol },
+            new WeaponOffer { weaponName = "Knife", cost = 100, category = WeaponCategory.Melee },
+            new WeaponOffer { weaponName = "R-19S", cost = 150, category = WeaponCategory.Pistol },
+            new WeaponOffer { weaponName = "Machete", cost = 200, category = WeaponCategory.Melee },
+            new WeaponOffer { weaponName = "Fireaxe", cost = 300, category = WeaponCategory.Melee },
+            new WeaponOffer { weaponName = "M12C", cost = 500, category = WeaponCategory.Shotgun },
+            new WeaponOffer { weaponName = "VZ-9", cost = 500, category = WeaponCategory.MachinePistol },
+            new WeaponOffer { weaponName = "GL-6", cost = 625, category = WeaponCategory.GrenadeLauncher },
+            new WeaponOffer { weaponName = "R44-C", cost = 700, category = WeaponCategory.Revolver },
+            new WeaponOffer { weaponName = "M870A", cost = 750, category = WeaponCategory.Shotgun },
+            new WeaponOffer { weaponName = "MP-5C", cost = 750, category = WeaponCategory.SubmachineGun },
+            new WeaponOffer { weaponName = "Katana", cost = 850, category = WeaponCategory.Melee },
+            new WeaponOffer { weaponName = "M40R", cost = 1000, category = WeaponCategory.SniperRifle },
+            new WeaponOffer { weaponName = "AK-R", cost = 1250, category = WeaponCategory.AssaultRifle },
+            new WeaponOffer { weaponName = "SPMG-249", cost = 1250, category = WeaponCategory.SupportMachineGun },
+            new WeaponOffer { weaponName = "RPL-7", cost = 1250, category = WeaponCategory.RocketLauncher },
+            new WeaponOffer { weaponName = "MK27R", cost = 1500, category = WeaponCategory.AssaultRifle },
+            new WeaponOffer { weaponName = "SAW-12C", cost = 2000, category = WeaponCategory.FuelMelee }
         };
     }
 }

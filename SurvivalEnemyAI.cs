@@ -52,6 +52,7 @@ public class SurvivalEnemyAI : MonoBehaviour
     private bool inSpecial;
     private bool canAttack = true;
     private bool isAttacking;
+    private bool specialRoutineActive;
 
     static readonly float[] DamageMultipliers = { 0.4f, 1f, 2f, 4f };
     static readonly float[] SpeedMultipliers = { 0.8f, 1f, 1.2f, 1.5f };
@@ -169,30 +170,37 @@ public class SurvivalEnemyAI : MonoBehaviour
 
     void UpdateSpecial(float dist)
     {
-        if (Time.time < nextSpecialTime)
+        if (specialRoutineActive || Time.time < nextSpecialTime)
             return;
 
         switch (archetype)
         {
             case EnemyArchetype.RocketeerNewborn:
                 if (dist <= specialRange)
+                {
+                    specialRoutineActive = true;
                     StartCoroutine(RocketVolleyRoutine());
+                }
                 break;
 
             case EnemyArchetype.ShadowNewborn:
+                specialRoutineActive = true;
                 StartCoroutine(ShadowCloakRoutine());
                 break;
 
             case EnemyArchetype.Miniboss1:
+                specialRoutineActive = true;
                 StartCoroutine(MinibossRoutine());
                 break;
 
             case EnemyArchetype.BladeRobot:
+                specialRoutineActive = true;
                 StartCoroutine(BladeSpinRoutine());
                 break;
 
             case EnemyArchetype.Miniboss2:
             case EnemyArchetype.Miniboss3:
+                specialRoutineActive = true;
                 StartCoroutine(LineStrikeRoutine());
                 break;
         }
@@ -214,6 +222,7 @@ public class SurvivalEnemyAI : MonoBehaviour
 
         canAttack = true;
         inSpecial = false;
+        specialRoutineActive = false;
     }
 
     IEnumerator ShadowCloakRoutine()
@@ -223,6 +232,7 @@ public class SurvivalEnemyAI : MonoBehaviour
         SetAlpha(0.02f);
         yield return new WaitForSeconds(25f);
         SetAlpha(1f);
+        specialRoutineActive = false;
     }
 
     IEnumerator MinibossRoutine()
@@ -240,8 +250,7 @@ public class SurvivalEnemyAI : MonoBehaviour
             yield return new WaitForSeconds(0.75f);
         }
 
-        if (player != null)
-            transform.position = player.position + Random.insideUnitSphere * 8f;
+        WarpNearPlayerOnNavMesh(8f, 12f);
 
         float runEnd = Time.time + 20f;
         if (agent != null)
@@ -252,6 +261,7 @@ public class SurvivalEnemyAI : MonoBehaviour
 
         canAttack = true;
         inSpecial = false;
+        specialRoutineActive = false;
     }
 
     IEnumerator BladeSpinRoutine()
@@ -260,6 +270,7 @@ public class SurvivalEnemyAI : MonoBehaviour
         canAttack = true;
         yield return new WaitForSeconds(10f);
         inSpecial = false;
+        specialRoutineActive = false;
     }
 
     IEnumerator LineStrikeRoutine()
@@ -282,6 +293,26 @@ public class SurvivalEnemyAI : MonoBehaviour
 
         yield return new WaitForSeconds(archetype == EnemyArchetype.Miniboss3 ? 2f : 1f);
         inSpecial = false;
+        specialRoutineActive = false;
+    }
+
+    void WarpNearPlayerOnNavMesh(float radius, float sampleDistance)
+    {
+        if (player == null || agent == null)
+            return;
+
+        Vector3 candidate = player.position + Random.insideUnitSphere * radius;
+        candidate.y = player.position.y;
+
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(candidate, out hit, sampleDistance, NavMesh.AllAreas))
+        {
+            agent.Warp(hit.position);
+            return;
+        }
+
+        if (NavMesh.SamplePosition(transform.position, out hit, sampleDistance, NavMesh.AllAreas))
+            agent.Warp(hit.position);
     }
 
     void SpawnProjectile()

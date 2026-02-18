@@ -21,19 +21,22 @@ public class SurvivalEnemyAI : MonoBehaviour
     [Header("Core")]
     public EnemyArchetype archetype = EnemyArchetype.Newborn;
     public NavMeshAgent agent;
-    public Transform player;
+
+    [Header("Melee Attack")]
+    public Collider attackHitbox;
+    public float attackWindup = 1f;
+    public float attackActiveTime = 0.2f;
+    public float attackCooldown = 1.2f;
+    public float attackRange = 2f;
 
     [Header("Health & Damage")]
     public float maxHealth = 50f;
     public float currentHealth = 50f;
     public float basicDamage = 10f;
-    public float attackRange = 2f;
-    public float attackCooldown = 1.2f;
 
     [Header("Movement")]
     public float walkSpeed = 3.5f;
     public float runSpeed = 4.5f;
-    public float chaseRange = 40f;
 
     [Header("Specials")]
     public GameObject projectilePrefab;
@@ -43,11 +46,13 @@ public class SurvivalEnemyAI : MonoBehaviour
     public float specialRange = 12f;
 
     private SurvivalController survivalController;
+    private Transform player;
     private Renderer[] renderers;
-    private float nextAttackTime;
     private float nextSpecialTime;
     private bool inSpecial;
     private bool canAttack = true;
+    private bool isAttacking;
+    private bool specialRoutineActive;
 
     static readonly float[] DamageMultipliers = { 0.4f, 1f, 2f, 4f };
     static readonly float[] SpeedMultipliers = { 0.8f, 1f, 1.2f, 1.5f };
@@ -58,6 +63,10 @@ public class SurvivalEnemyAI : MonoBehaviour
             agent = GetComponent<NavMeshAgent>();
 
         renderers = GetComponentsInChildren<Renderer>(true);
+
+        if (attackHitbox != null)
+            attackHitbox.enabled = false;
+
         ApplyArchetypeDefaults();
         ApplyDifficultyModifiers();
         currentHealth = maxHealth;
@@ -65,8 +74,7 @@ public class SurvivalEnemyAI : MonoBehaviour
 
     void Start()
     {
-        if (player == null)
-            player = GameObject.FindGameObjectWithTag("Player")?.transform;
+        player = GameObject.FindGameObjectWithTag("Player")?.transform;
 
         if (survivalController == null)
             survivalController = FindObjectOfType<SurvivalController>();
@@ -80,8 +88,6 @@ public class SurvivalEnemyAI : MonoBehaviour
             return;
 
         float dist = Vector3.Distance(transform.position, player.position);
-        if (dist > chaseRange)
-            return;
 
         UpdateMovement(dist);
         UpdateSpecial(dist);
@@ -95,6 +101,12 @@ public class SurvivalEnemyAI : MonoBehaviour
 
     void UpdateMovement(float dist)
     {
+        if (isAttacking)
+        {
+            agent.isStopped = true;
+            return;
+        }
+
         if (inSpecial && (archetype == EnemyArchetype.RocketeerNewborn || archetype == EnemyArchetype.BladeRobot))
         {
             agent.isStopped = true;
@@ -113,47 +125,75 @@ public class SurvivalEnemyAI : MonoBehaviour
 
     void UpdateAttack(float dist)
     {
-        if (!canAttack || Time.time < nextAttackTime || dist > attackRange)
+        if (!canAttack || isAttacking || dist > attackRange)
             return;
 
-        float damage = basicDamage * GetDifficultyDamageMultiplier();
+        if (inSpecial && archetype == EnemyArchetype.RocketeerNewborn)
+            return;
 
-        if (archetype == EnemyArchetype.RocketeerNewborn)
-            damage *= 2f;
+        StartCoroutine(AttackRoutine());
+    }
 
-        if (archetype == EnemyArchetype.BladeRobot && inSpecial)
-            damage *= 0.5f;
+    IEnumerator AttackRoutine()
+    {
+        isAttacking = true;
+        canAttack = false;
 
-        survivalController?.DamagePlayer(damage);
-        nextAttackTime = Time.time + attackCooldown;
+        if (agent != null)
+        {
+            agent.isStopped = true;
+            agent.ResetPath();
+        }
+
+        yield return new WaitForSeconds(attackWindup);
+
+        if (attackHitbox != null)
+            attackHitbox.enabled = true;
+
+        yield return new WaitForSeconds(attackActiveTime);
+
+        if (attackHitbox != null)
+            attackHitbox.enabled = false;
+
+        yield return new WaitForSeconds(attackCooldown);
+
+        isAttacking = false;
+        canAttack = true;
     }
 
     void UpdateSpecial(float dist)
     {
-        if (Time.time < nextSpecialTime)
+        if (specialRoutineActive || Time.time < nextSpecialTime)
             return;
 
         switch (archetype)
         {
             case EnemyArchetype.RocketeerNewborn:
                 if (dist <= specialRange)
+                {
+                    specialRoutineActive = true;
                     StartCoroutine(RocketVolleyRoutine());
+                }
                 break;
 
             case EnemyArchetype.ShadowNewborn:
+                specialRoutineActive = true;
                 StartCoroutine(ShadowCloakRoutine());
                 break;
 
             case EnemyArchetype.Miniboss1:
+                specialRoutineActive = true;
                 StartCoroutine(MinibossRoutine());
                 break;
 
             case EnemyArchetype.BladeRobot:
+                specialRoutineActive = true;
                 StartCoroutine(BladeSpinRoutine());
                 break;
 
             case EnemyArchetype.Miniboss2:
             case EnemyArchetype.Miniboss3:
+                specialRoutineActive = true;
                 StartCoroutine(LineStrikeRoutine());
                 break;
         }
@@ -175,6 +215,7 @@ public class SurvivalEnemyAI : MonoBehaviour
 
         canAttack = true;
         inSpecial = false;
+        specialRoutineActive = false;
     }
 
     IEnumerator ShadowCloakRoutine()
@@ -184,6 +225,7 @@ public class SurvivalEnemyAI : MonoBehaviour
         SetAlpha(0.02f);
         yield return new WaitForSeconds(25f);
         SetAlpha(1f);
+        specialRoutineActive = false;
     }
 
     IEnumerator MinibossRoutine()
@@ -191,7 +233,6 @@ public class SurvivalEnemyAI : MonoBehaviour
         inSpecial = true;
         canAttack = false;
 
-        // Walk mode + projectile power
         if (agent != null)
             agent.speed = walkSpeed;
 
@@ -202,9 +243,7 @@ public class SurvivalEnemyAI : MonoBehaviour
             yield return new WaitForSeconds(0.75f);
         }
 
-        // Teleport and forced run window
-        if (player != null)
-            transform.position = player.position + Random.insideUnitSphere * 8f;
+        WarpNearPlayerOnNavMesh(8f, 12f);
 
         float runEnd = Time.time + 20f;
         if (agent != null)
@@ -215,6 +254,7 @@ public class SurvivalEnemyAI : MonoBehaviour
 
         canAttack = true;
         inSpecial = false;
+        specialRoutineActive = false;
     }
 
     IEnumerator BladeSpinRoutine()
@@ -223,13 +263,13 @@ public class SurvivalEnemyAI : MonoBehaviour
         canAttack = true;
         yield return new WaitForSeconds(10f);
         inSpecial = false;
+        specialRoutineActive = false;
     }
 
     IEnumerator LineStrikeRoutine()
     {
         inSpecial = true;
 
-        // Placeholder: spawn several projectiles toward player direction.
         Vector3 direction = player != null ? (player.position - transform.position).normalized : transform.forward;
         Vector3 origin = transform.position + Vector3.up;
 
@@ -246,6 +286,26 @@ public class SurvivalEnemyAI : MonoBehaviour
 
         yield return new WaitForSeconds(archetype == EnemyArchetype.Miniboss3 ? 2f : 1f);
         inSpecial = false;
+        specialRoutineActive = false;
+    }
+
+    void WarpNearPlayerOnNavMesh(float radius, float sampleDistance)
+    {
+        if (player == null || agent == null)
+            return;
+
+        Vector3 candidate = player.position + Random.insideUnitSphere * radius;
+        candidate.y = player.position.y;
+
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(candidate, out hit, sampleDistance, NavMesh.AllAreas))
+        {
+            agent.Warp(hit.position);
+            return;
+        }
+
+        if (NavMesh.SamplePosition(transform.position, out hit, sampleDistance, NavMesh.AllAreas))
+            agent.Warp(hit.position);
     }
 
     void SpawnProjectile()
@@ -262,6 +322,16 @@ public class SurvivalEnemyAI : MonoBehaviour
             Vector3 direction = (player.position - spawnPoint.position).normalized;
             rb.velocity = direction * 14f;
         }
+    }
+
+    public float GetCurrentAttackDamage()
+    {
+        float damage = basicDamage * GetDifficultyDamageMultiplier();
+
+        if (archetype == EnemyArchetype.BladeRobot && inSpecial)
+            damage *= 0.5f;
+
+        return damage;
     }
 
     public void TakeDamage(float damage, bool headshot)
@@ -285,7 +355,7 @@ public class SurvivalEnemyAI : MonoBehaviour
             case EnemyArchetype.SpiderRobot:
                 maxHealth = 65f; basicDamage = 8f; walkSpeed = 3.6f; runSpeed = 4.2f; break;
             case EnemyArchetype.RocketeerNewborn:
-                maxHealth = 80f; basicDamage = 10f; walkSpeed = 2.4f; runSpeed = 3f; specialInterval = 8f; break;
+                maxHealth = 80f; basicDamage = 20f; walkSpeed = 2.4f; runSpeed = 3f; specialInterval = 8f; break;
             case EnemyArchetype.ShadowNewborn:
                 maxHealth = 100f; basicDamage = 10f; walkSpeed = 3.8f; runSpeed = 4.4f; specialInterval = 10f; break;
             case EnemyArchetype.Miniboss1:

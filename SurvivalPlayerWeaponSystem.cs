@@ -34,6 +34,7 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
     public bool useMuzzleAsHitscanOrigin;
     public LayerMask hitscanMask = ~0;
     public bool raycastHitsTriggers = true;
+    public List<string> ignoredHitscanTags = new List<string> { "Player", "EnemyHitbox", "Weapon" };
 
     [Header("Debug")]
     public bool debugHitscan;
@@ -162,14 +163,13 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
             ? QueryTriggerInteraction.Collide
             : QueryTriggerInteraction.Ignore;
 
-        bool didHit = Physics.Raycast(
+        RaycastHit[] hits = Physics.RaycastAll(
             ray,
-            out RaycastHit hit,
             equipped.range,
             hitscanMask,
             triggerMode);
 
-        if (!didHit)
+        if (hits.Length == 0)
         {
             if (debugHitscan)
             {
@@ -179,6 +179,40 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
 
             return;
         }
+
+        Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        RaycastHit? chosenHit = null;
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider collider = hits[i].collider;
+            if (collider == null)
+                continue;
+
+            if (ShouldIgnoreHit(collider))
+            {
+                if (debugHitscan)
+                    Debug.Log($"Ignoring hitscan target due to tag: {collider.name} [{collider.tag}]");
+
+                continue;
+            }
+
+            chosenHit = hits[i];
+            break;
+        }
+
+        if (!chosenHit.HasValue)
+        {
+            if (debugHitscan)
+            {
+                Debug.DrawRay(origin, direction * equipped.range, debugMissColor, debugRayDuration);
+                Debug.Log("Hitscan only hit ignored tags.");
+            }
+
+            return;
+        }
+
+        RaycastHit hit = chosenHit.Value;
 
         if (debugHitscan)
         {
@@ -200,6 +234,27 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
 
         if (debugHitscan)
             Debug.Log($"No SurvivalEnemyHurtbox/SurvivalEnemyAI found on hit target hierarchy: {hit.collider.name}");
+    }
+
+    bool ShouldIgnoreHit(Collider hitCollider)
+    {
+        if (hitCollider == null)
+            return true;
+
+        if (ignoredHitscanTags == null || ignoredHitscanTags.Count == 0)
+            return false;
+
+        for (int i = 0; i < ignoredHitscanTags.Count; i++)
+        {
+            string ignoredTag = ignoredHitscanTags[i];
+            if (string.IsNullOrWhiteSpace(ignoredTag))
+                continue;
+
+            if (hitCollider.CompareTag(ignoredTag))
+                return true;
+        }
+
+        return false;
     }
 
     bool TryResolveEnemyTarget(

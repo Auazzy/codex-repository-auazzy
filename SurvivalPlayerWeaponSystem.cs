@@ -30,6 +30,17 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
     [Header("Weapons")]
     public List<WeaponRuntimeConfig> weaponConfigs = new List<WeaponRuntimeConfig>();
 
+    [Header("Hitscan")]
+    public bool useMuzzleAsHitscanOrigin;
+    public LayerMask hitscanMask = ~0;
+    public bool raycastHitsTriggers = true;
+
+    [Header("Debug")]
+    public bool debugHitscan;
+    public float debugRayDuration = 1.5f;
+    public Color debugHitColor = Color.green;
+    public Color debugMissColor = Color.red;
+
     private readonly Dictionary<string, int> currentMag = new Dictionary<string, int>();
     private readonly Dictionary<string, int> currentReserve = new Dictionary<string, int>();
     private WeaponRuntimeConfig equipped;
@@ -140,20 +151,92 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
         if (playerCamera == null)
             return;
 
-        Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
-        if (!Physics.Raycast(ray, out RaycastHit hit, equipped.range))
-            return;
+        Vector3 origin = playerCamera.transform.position;
+        if (useMuzzleAsHitscanOrigin && equipped != null && equipped.muzzle != null)
+            origin = equipped.muzzle.position;
 
-        SurvivalEnemyHurtbox hurtbox = hit.collider.GetComponentInParent<SurvivalEnemyHurtbox>();
-        if (hurtbox != null)
+        Vector3 direction = playerCamera.transform.forward;
+        Ray ray = new Ray(origin, direction);
+
+        QueryTriggerInteraction triggerMode = raycastHitsTriggers
+            ? QueryTriggerInteraction.Collide
+            : QueryTriggerInteraction.Ignore;
+
+        bool didHit = Physics.Raycast(
+            ray,
+            out RaycastHit hit,
+            equipped.range,
+            hitscanMask,
+            triggerMode);
+
+        if (!didHit)
         {
-            hurtbox.ApplyHit(equipped.damage);
+            if (debugHitscan)
+            {
+                Debug.DrawRay(origin, direction * equipped.range, debugMissColor, debugRayDuration);
+                Debug.Log($"Hitscan miss. Origin={origin} Dir={direction} Range={equipped.range}");
+            }
+
             return;
         }
 
-        SurvivalEnemyAI enemyAI = hit.collider.GetComponentInParent<SurvivalEnemyAI>();
-        if (enemyAI != null)
+        if (debugHitscan)
+        {
+            Debug.DrawLine(origin, hit.point, debugHitColor, debugRayDuration);
+            Debug.Log($"Hitscan hit: {hit.collider.name} at {hit.point}");
+        }
+
+        if (TryResolveEnemyTarget(hit.collider, out SurvivalEnemyHurtbox hurtbox, out SurvivalEnemyAI enemyAI))
+        {
+            if (hurtbox != null)
+            {
+                hurtbox.ApplyHit(equipped.damage);
+                return;
+            }
+
             enemyAI.TakeDamage(equipped.damage, false);
+            return;
+        }
+
+        if (debugHitscan)
+            Debug.Log($"No SurvivalEnemyHurtbox/SurvivalEnemyAI found on hit target hierarchy: {hit.collider.name}");
+    }
+
+    bool TryResolveEnemyTarget(
+        Collider hitCollider,
+        out SurvivalEnemyHurtbox hurtbox,
+        out SurvivalEnemyAI enemyAI)
+    {
+        hurtbox = null;
+        enemyAI = null;
+
+        if (hitCollider == null)
+            return false;
+
+        hurtbox = hitCollider.GetComponent<SurvivalEnemyHurtbox>();
+        if (hurtbox == null)
+            hurtbox = hitCollider.GetComponentInParent<SurvivalEnemyHurtbox>();
+        if (hurtbox == null)
+            hurtbox = hitCollider.transform.root.GetComponentInChildren<SurvivalEnemyHurtbox>();
+
+        if (hurtbox != null)
+        {
+            enemyAI = hurtbox.enemy != null
+                ? hurtbox.enemy
+                : hurtbox.GetComponentInParent<SurvivalEnemyAI>();
+
+            return true;
+        }
+
+        enemyAI = hitCollider.GetComponent<SurvivalEnemyAI>();
+        if (enemyAI == null)
+            enemyAI = hitCollider.GetComponentInParent<SurvivalEnemyAI>();
+        if (enemyAI == null && hitCollider.attachedRigidbody != null)
+            enemyAI = hitCollider.attachedRigidbody.GetComponentInParent<SurvivalEnemyAI>();
+        if (enemyAI == null)
+            enemyAI = hitCollider.transform.root.GetComponentInChildren<SurvivalEnemyAI>();
+
+        return enemyAI != null;
     }
 
     void FireProjectile()

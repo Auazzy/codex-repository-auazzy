@@ -25,8 +25,6 @@ public class SurvivalController : MonoBehaviour
     {
         public string weaponName;
         public GameObject weaponPrefab;
-        public Avatar weaponAvatar;
-        public RuntimeAnimatorController weaponAnimatorController;
     }
 
     public enum WeaponCategory
@@ -68,6 +66,7 @@ public class SurvivalController : MonoBehaviour
     public GameObject survivalUIRoot;
     public TMP_Text objectiveText;
     public TMP_Text waveText;
+    public TMP_Text enemiesLeftText;
     public TMP_Text coinsText;
     public TMP_Text intermissionText;
     public TMP_Text healthText;
@@ -95,7 +94,7 @@ public class SurvivalController : MonoBehaviour
     [Header("Weapon Visuals")]
     public Transform weaponHoldPoint;
     public List<WeaponVisualEntry> weaponVisuals = new List<WeaponVisualEntry>();
-    public Animator weaponAvatarAnimator;
+    public SurvivalPlayerWeaponSystem playerWeaponSystem;
 
     [Header("Damage FX")]
     public Transform cameraShakeTarget;
@@ -126,7 +125,6 @@ public class SurvivalController : MonoBehaviour
     private readonly List<string> ownedWeapons = new List<string>();
     private string equippedWeaponName;
     private GameObject equippedWeaponVisual;
-    private RuntimeAnimatorController defaultWeaponAnimatorController;
     private float shakeTimer;
     private Vector3 cameraDefaultLocalPosition;
     private Coroutine damageFlashRoutine;
@@ -166,9 +164,6 @@ public class SurvivalController : MonoBehaviour
             damageFlashImage.color = flashColor;
         }
 
-        if (weaponAvatarAnimator != null && defaultWeaponAnimatorController == null)
-            defaultWeaponAnimatorController = weaponAvatarAnimator.runtimeAnimatorController;
-
         if (cameraShakeTarget != null)
             cameraDefaultLocalPosition = cameraShakeTarget.localPosition;
 
@@ -188,6 +183,7 @@ public class SurvivalController : MonoBehaviour
         waveRunning = false;
         intermissionRunning = false;
         gameOverTriggered = false;
+        UpdateEnemyCounterUI();
         StartNextWave();
     }
 
@@ -278,6 +274,7 @@ public class SurvivalController : MonoBehaviour
             return;
 
         aliveEnemies++;
+        UpdateEnemyCounterUI();
 
         SurvivalEnemyTracker tracker = enemy.GetComponent<SurvivalEnemyTracker>();
         if (tracker == null)
@@ -296,6 +293,7 @@ public class SurvivalController : MonoBehaviour
             return;
 
         aliveEnemies = Mathf.Max(0, aliveEnemies - 1);
+        UpdateEnemyCounterUI();
 
         if (killReward > 0)
             AddCoins(killReward);
@@ -307,6 +305,8 @@ public class SurvivalController : MonoBehaviour
     void HandleWaveComplete()
     {
         waveRunning = false;
+        aliveEnemies = 0;
+        UpdateEnemyCounterUI();
 
         if (currentWaveIndex >= waves.Count - 1)
         {
@@ -408,6 +408,9 @@ public class SurvivalController : MonoBehaviour
     {
         equippedWeaponName = weaponName;
         RefreshWeaponVisual();
+
+        if (playerWeaponSystem != null)
+            playerWeaponSystem.OnWeaponEquipped(weaponName, GetOffer(weaponName));
     }
 
     void EquipStarterLoadout()
@@ -426,27 +429,16 @@ public class SurvivalController : MonoBehaviour
         if (equippedWeaponVisual != null)
             Destroy(equippedWeaponVisual);
 
+        if (weaponHoldPoint == null)
+            return;
+
         WeaponVisualEntry entry = weaponVisuals.Find(v => v.weaponName == equippedWeaponName);
-        if (entry == null)
+        if (entry == null || entry.weaponPrefab == null)
             return;
 
-        if (entry.weaponPrefab != null && weaponHoldPoint != null)
-        {
-            equippedWeaponVisual = Instantiate(entry.weaponPrefab, weaponHoldPoint);
-            equippedWeaponVisual.transform.localPosition = Vector3.zero;
-            equippedWeaponVisual.transform.localRotation = Quaternion.identity;
-            return;
-        }
-
-        if (entry.weaponAvatar != null && weaponAvatarAnimator != null)
-        {
-            weaponAvatarAnimator.avatar = entry.weaponAvatar;
-            weaponAvatarAnimator.runtimeAnimatorController = entry.weaponAnimatorController != null
-                ? entry.weaponAnimatorController
-                : defaultWeaponAnimatorController;
-            weaponAvatarAnimator.Rebind();
-            weaponAvatarAnimator.Update(0f);
-        }
+        equippedWeaponVisual = Instantiate(entry.weaponPrefab, weaponHoldPoint);
+        equippedWeaponVisual.transform.localPosition = Vector3.zero;
+        equippedWeaponVisual.transform.localRotation = Quaternion.identity;
     }
 
     WeaponOffer GetOffer(string weaponName)
@@ -531,6 +523,16 @@ public class SurvivalController : MonoBehaviour
         return totalCost;
     }
 
+    public bool TryBuyAmmo(string weaponName, int missingInMag, int missingInReserve)
+    {
+        WeaponOffer offer = GetOffer(weaponName);
+        if (offer == null)
+            return false;
+
+        int cost = GetAmmoCost(offer, missingInMag, missingInReserve);
+        return TrySpendCoins(cost);
+    }
+
     public int GetAmmoCost(WeaponOffer offer, int missingInMag, int missingInReserve)
     {
         if (offer == null)
@@ -568,11 +570,15 @@ public class SurvivalController : MonoBehaviour
         if (waveText == null)
             return;
 
-        string label = waves.Count > currentWaveIndex && currentWaveIndex >= 0
-            ? waves[currentWaveIndex].label
-            : "Wave";
+        waveText.text = $"Wave: {currentWaveIndex + 1}";
+    }
 
-        waveText.text = $"{label} (Wave {currentWaveIndex + 1}/{waves.Count})";
+    void UpdateEnemyCounterUI()
+    {
+        if (enemiesLeftText == null)
+            return;
+
+        enemiesLeftText.text = $"Enemies left: {Mathf.Max(0, aliveEnemies)}";
     }
 
     void UpdateIntermissionUI()

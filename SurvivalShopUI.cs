@@ -17,6 +17,7 @@ public class SurvivalShopUI : MonoBehaviour
     }
 
     public SurvivalController controller;
+    public SurvivalPlayerWeaponSystem playerWeaponSystem;
     public List<WeaponRow> rows = new List<WeaponRow>();
     public TMP_Text healCostText;
     public int healCostPerHealth = 2;
@@ -30,6 +31,9 @@ public class SurvivalShopUI : MonoBehaviour
     {
         if (controller == null)
             controller = FindObjectOfType<SurvivalController>();
+
+        if (playerWeaponSystem == null)
+            playerWeaponSystem = FindObjectOfType<SurvivalPlayerWeaponSystem>();
 
         if (controller == null)
             return;
@@ -78,6 +82,15 @@ public class SurvivalShopUI : MonoBehaviour
     {
         if (controller != null && controller.SellWeapon(weaponName))
             Refresh();
+    }
+
+    public void BuyAmmoForEquippedWeapon()
+    {
+        if (playerWeaponSystem == null)
+            playerWeaponSystem = FindObjectOfType<SurvivalPlayerWeaponSystem>();
+
+        playerWeaponSystem?.BuyAmmoForEquippedWeapon();
+        Refresh();
     }
 
     public void HealPlayer()

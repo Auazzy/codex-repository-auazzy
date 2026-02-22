@@ -1,31 +1,24 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 
-[RequireComponent(typeof(Collider))]
 public class SurvivalSupplyCrate : MonoBehaviour
 {
     [Header("UI")]
     public GameObject indicator;
     public TMP_Text promptText;
-    public GameObject healthBarRoot;
-    public Image healthBarFill;
 
     [Header("Interaction")]
+    public float interactionRange = 3f;
     public float holdDuration = 1.5f;
     public string promptMessage = "Hold E to buy supplies";
 
     private SurvivalController controller;
-    private bool playerInRange;
+    private Transform player;
     private float holdTimer;
     private bool opened;
 
     void Awake()
     {
-        Collider col = GetComponent<Collider>();
-        if (col != null && !col.isTrigger)
-            col.isTrigger = true;
-
         if (promptText == null)
             promptText = GetComponentInChildren<TMP_Text>(true);
 
@@ -36,31 +29,57 @@ public class SurvivalSupplyCrate : MonoBehaviour
                 indicator = indicatorChild.gameObject;
         }
 
-        if (healthBarRoot != null)
-            healthBarRoot.SetActive(true);
+        if (indicator != null && indicator.GetComponent<BillboardUIAlwaysVisible>() == null)
+            indicator.AddComponent<BillboardUIAlwaysVisible>();
 
-        if (healthBarFill != null)
-            healthBarFill.fillAmount = 1f;
+        if (promptText != null && promptText.gameObject.GetComponent<BillboardUIAlwaysVisible>() == null)
+            promptText.gameObject.AddComponent<BillboardUIAlwaysVisible>();
 
-        EnsureBillboard(indicator);
-        EnsureBillboard(promptText != null ? promptText.gameObject : null);
-        EnsureBillboard(healthBarRoot);
+        SetPrompt(false);
     }
 
     public void Initialize(SurvivalController survivalController)
     {
         controller = survivalController;
 
+        if (player == null)
+            player = GameObject.FindGameObjectWithTag("Player")?.transform;
+
         if (indicator != null)
             indicator.SetActive(true);
 
+        holdTimer = 0f;
+        opened = false;
         SetPrompt(false);
+        UpdatePrompt();
     }
 
     void Update()
     {
-        if (!playerInRange || opened)
+        if (opened)
             return;
+
+        if (player == null)
+            player = GameObject.FindGameObjectWithTag("Player")?.transform;
+
+        if (player == null)
+            return;
+
+        bool inRange = Vector3.Distance(player.position, transform.position) <= interactionRange;
+
+        if (!inRange)
+        {
+            if (holdTimer > 0f)
+            {
+                holdTimer = 0f;
+                UpdatePrompt();
+            }
+
+            SetPrompt(false);
+            return;
+        }
+
+        SetPrompt(true);
 
         if (Input.GetKey(KeyCode.E))
         {
@@ -70,6 +89,7 @@ public class SurvivalSupplyCrate : MonoBehaviour
             if (holdTimer >= holdDuration)
             {
                 opened = true;
+                holdTimer = 0f;
                 SetPrompt(false);
                 controller?.OpenShop(this);
             }
@@ -79,26 +99,6 @@ public class SurvivalSupplyCrate : MonoBehaviour
             holdTimer = 0f;
             UpdatePrompt();
         }
-    }
-
-    void OnTriggerEnter(Collider other)
-    {
-        if (!other.CompareTag("Player"))
-            return;
-
-        playerInRange = true;
-        UpdatePrompt();
-        SetPrompt(true);
-    }
-
-    void OnTriggerExit(Collider other)
-    {
-        if (!other.CompareTag("Player"))
-            return;
-
-        playerInRange = false;
-        holdTimer = 0f;
-        SetPrompt(false);
     }
 
     void UpdatePrompt()
@@ -123,22 +123,10 @@ public class SurvivalSupplyCrate : MonoBehaviour
             promptText.gameObject.SetActive(visible);
     }
 
-    void EnsureBillboard(GameObject target)
-    {
-        if (target == null || target.GetComponent<BillboardUIAlwaysVisible>() != null)
-            return;
-
-        target.AddComponent<BillboardUIAlwaysVisible>();
-    }
-
     public void NotifyShopClosed()
     {
-        if (!playerInRange)
-            return;
-
-        holdTimer = 0f;
         opened = false;
+        holdTimer = 0f;
         UpdatePrompt();
-        SetPrompt(true);
     }
 }

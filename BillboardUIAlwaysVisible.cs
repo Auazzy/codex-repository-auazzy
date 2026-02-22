@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.UI;
 
 public class BillboardUIAlwaysVisible : MonoBehaviour
 {
@@ -7,19 +6,25 @@ public class BillboardUIAlwaysVisible : MonoBehaviour
     public bool forceCanvasOnTop = true;
     public int sortingOrder = 500;
 
-    private Canvas targetCanvas;
-
     void Awake()
     {
-        targetCanvas = GetComponent<Canvas>();
-
         if (targetCamera == null)
             targetCamera = Camera.main;
 
-        if (forceCanvasOnTop && targetCanvas != null)
+        if (!forceCanvasOnTop)
+            return;
+
+        Canvas[] canvases = GetComponentsInChildren<Canvas>(true);
+        for (int i = 0; i < canvases.Length; i++)
         {
-            targetCanvas.overrideSorting = true;
-            targetCanvas.sortingOrder = sortingOrder;
+            canvases[i].overrideSorting = true;
+            canvases[i].sortingOrder = sortingOrder;
+        }
+
+        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            renderers[i].sortingOrder = sortingOrder;
         }
     }
 

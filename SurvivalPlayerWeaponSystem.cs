@@ -74,6 +74,9 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
 
     void Update()
     {
+        if (survivalController != null && survivalController.IsShopOpen)
+            return;
+
         HandleWeaponSwitchInput();
 
         if (equipped == null || !equipped.canFire)

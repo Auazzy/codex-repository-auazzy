@@ -61,8 +61,10 @@ public class SurvivalShopUI : MonoBehaviour
             if (row.categoryText != null)
                 row.categoryText.text = offer.category.ToString();
 
+            bool owned = controller.IsWeaponOwned(offer.weaponName);
+
             if (row.costText != null)
-                row.costText.text = $"Cost: {offer.cost}";
+                row.costText.text = owned ? "Owned" : $"Cost: {offer.cost}";
         }
 
         if (healCostText != null)

@@ -69,6 +69,7 @@ public class SurvivalController : MonoBehaviour
     public TMP_Text enemiesLeftText;
     public TMP_Text coinsText;
     public TMP_Text intermissionText;
+    public TMP_Text cratePromptText;
     public TMP_Text healthText;
     public Image healthFillImage;
     public Image damageFlashImage;
@@ -133,6 +134,7 @@ public class SurvivalController : MonoBehaviour
     public int Coins => coins;
     public float CurrentHealth => currentHealth;
     public float MaxHealth => maxHealth;
+    public bool IsShopOpen => shopUIRoot != null && shopUIRoot.activeSelf;
 
     void OnEnable()
     {
@@ -157,6 +159,9 @@ public class SurvivalController : MonoBehaviour
         if (intermissionText != null)
             intermissionText.gameObject.SetActive(false);
 
+        if (cratePromptText != null)
+            cratePromptText.gameObject.SetActive(false);
+
         if (damageFlashImage != null)
         {
             Color flashColor = damageFlashImage.color;
@@ -166,6 +171,9 @@ public class SurvivalController : MonoBehaviour
 
         if (cameraShakeTarget != null)
             cameraDefaultLocalPosition = cameraShakeTarget.localPosition;
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
 
         StartSurvival();
     }
@@ -365,6 +373,10 @@ public class SurvivalController : MonoBehaviour
         if (shopUIRoot != null)
             shopUIRoot.SetActive(true);
 
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        SetCratePrompt(false, string.Empty);
         activeCrate = crate;
         ShowObjective("Supply crate opened.");
     }
@@ -374,8 +386,20 @@ public class SurvivalController : MonoBehaviour
         if (shopUIRoot != null)
             shopUIRoot.SetActive(false);
 
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
         if (activeCrate != null)
             activeCrate.NotifyShopClosed();
+    }
+
+    public void SetCratePrompt(bool visible, string message)
+    {
+        if (cratePromptText == null)
+            return;
+
+        cratePromptText.gameObject.SetActive(visible);
+        cratePromptText.text = message;
     }
 
     public IReadOnlyList<WeaponOffer> GetWeaponOffers()
@@ -385,6 +409,11 @@ public class SurvivalController : MonoBehaviour
     public IReadOnlyList<string> GetOwnedWeapons()
     {
         return ownedWeapons;
+    }
+
+    public bool IsWeaponOwned(string weaponName)
+    {
+        return ownedWeapons.Contains(weaponName);
     }
 
     public string GetEquippedWeaponName()

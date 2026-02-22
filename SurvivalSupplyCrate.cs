@@ -1,11 +1,9 @@
 using UnityEngine;
-using TMPro;
 
 public class SurvivalSupplyCrate : MonoBehaviour
 {
     [Header("UI")]
     public GameObject indicator;
-    public TMP_Text promptText;
 
     [Header("Interaction")]
     public float interactionRange = 3f;
@@ -19,9 +17,6 @@ public class SurvivalSupplyCrate : MonoBehaviour
 
     void Awake()
     {
-        if (promptText == null)
-            promptText = GetComponentInChildren<TMP_Text>(true);
-
         if (indicator == null)
         {
             Transform indicatorChild = transform.Find("Indicator");
@@ -31,11 +26,6 @@ public class SurvivalSupplyCrate : MonoBehaviour
 
         if (indicator != null && indicator.GetComponent<BillboardUIAlwaysVisible>() == null)
             indicator.AddComponent<BillboardUIAlwaysVisible>();
-
-        if (promptText != null && promptText.gameObject.GetComponent<BillboardUIAlwaysVisible>() == null)
-            promptText.gameObject.AddComponent<BillboardUIAlwaysVisible>();
-
-        SetPrompt(false);
     }
 
     public void Initialize(SurvivalController survivalController)
@@ -50,8 +40,7 @@ public class SurvivalSupplyCrate : MonoBehaviour
 
         holdTimer = 0f;
         opened = false;
-        SetPrompt(false);
-        UpdatePrompt();
+        controller?.SetCratePrompt(false, promptMessage);
     }
 
     void Update()
@@ -70,63 +59,43 @@ public class SurvivalSupplyCrate : MonoBehaviour
         if (!inRange)
         {
             if (holdTimer > 0f)
-            {
                 holdTimer = 0f;
-                UpdatePrompt();
-            }
 
-            SetPrompt(false);
+            controller?.SetCratePrompt(false, promptMessage);
             return;
         }
-
-        SetPrompt(true);
 
         if (Input.GetKey(KeyCode.E))
         {
             holdTimer += Time.deltaTime;
-            UpdatePrompt();
+            controller?.SetCratePrompt(true, GetPromptMessage());
 
             if (holdTimer >= holdDuration)
             {
                 opened = true;
                 holdTimer = 0f;
-                SetPrompt(false);
+                controller?.SetCratePrompt(false, promptMessage);
                 controller?.OpenShop(this);
             }
         }
-        else if (holdTimer > 0f)
+        else
         {
             holdTimer = 0f;
-            UpdatePrompt();
+            controller?.SetCratePrompt(true, promptMessage);
         }
     }
 
-    void UpdatePrompt()
+    string GetPromptMessage()
     {
-        if (promptText == null)
-            return;
-
-        if (holdTimer <= 0f)
-        {
-            promptText.text = promptMessage;
-            return;
-        }
-
         float progress = Mathf.Clamp01(holdTimer / Mathf.Max(0.1f, holdDuration));
         int percent = Mathf.RoundToInt(progress * 100f);
-        promptText.text = $"{promptMessage} ({percent}%)";
-    }
-
-    void SetPrompt(bool visible)
-    {
-        if (promptText != null)
-            promptText.gameObject.SetActive(visible);
+        return $"{promptMessage} ({percent}%)";
     }
 
     public void NotifyShopClosed()
     {
         opened = false;
         holdTimer = 0f;
-        UpdatePrompt();
+        controller?.SetCratePrompt(false, promptMessage);
     }
 }

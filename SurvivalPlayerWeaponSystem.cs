@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using TMPro;
 using UnityEngine;
 
@@ -26,6 +27,8 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
     public Camera playerCamera;
     public SurvivalController survivalController;
     public TMP_Text ammoText;
+    public TMP_Text equippedWeaponText;
+    public TMP_Text inventoryListText;
 
     [Header("Weapons")]
     public List<WeaponRuntimeConfig> weaponConfigs = new List<WeaponRuntimeConfig>();
@@ -66,10 +69,13 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
         }
 
         UpdateAmmoUI();
+        UpdateInventoryUI();
     }
 
     void Update()
     {
+        HandleWeaponSwitchInput();
+
         if (equipped == null || !equipped.canFire)
             return;
 
@@ -89,6 +95,7 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
         if (equipped == null)
         {
             UpdateAmmoUI();
+            UpdateInventoryUI();
             return;
         }
 
@@ -108,6 +115,7 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
         }
 
         UpdateAmmoUI();
+        UpdateInventoryUI();
     }
 
     public void BuyAmmoForEquippedWeapon()
@@ -124,6 +132,24 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
         currentMag[equipped.weaponName] = equipped.magazineSize;
         currentReserve[equipped.weaponName] = equipped.reserveSize;
         UpdateAmmoUI();
+    }
+
+    void HandleWeaponSwitchInput()
+    {
+        if (survivalController == null)
+            return;
+
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+            survivalController.EquipPreviousOwnedWeapon();
+
+        if (Input.GetKeyDown(KeyCode.Alpha2))
+            survivalController.EquipNextOwnedWeapon();
+
+        float scroll = Input.mouseScrollDelta.y;
+        if (scroll > 0.01f)
+            survivalController.EquipNextOwnedWeapon();
+        else if (scroll < -0.01f)
+            survivalController.EquipPreviousOwnedWeapon();
     }
 
     void Fire()
@@ -163,11 +189,7 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
             ? QueryTriggerInteraction.Collide
             : QueryTriggerInteraction.Ignore;
 
-        RaycastHit[] hits = Physics.RaycastAll(
-            ray,
-            equipped.range,
-            hitscanMask,
-            triggerMode);
+        RaycastHit[] hits = Physics.RaycastAll(ray, equipped.range, hitscanMask, triggerMode);
 
         if (hits.Length == 0)
         {
@@ -223,12 +245,10 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
         if (TryResolveEnemyTarget(hit.collider, out SurvivalEnemyHurtbox hurtbox, out SurvivalEnemyAI enemyAI))
         {
             if (hurtbox != null)
-            {
                 hurtbox.ApplyHit(equipped.damage);
-                return;
-            }
+            else
+                enemyAI.TakeDamage(equipped.damage, false);
 
-            enemyAI.TakeDamage(equipped.damage, false);
             return;
         }
 
@@ -359,9 +379,44 @@ public class SurvivalPlayerWeaponSystem : MonoBehaviour
         if (equipped == null || !equipped.canFire)
         {
             ammoText.text = "-/-";
+            UpdateInventoryUI();
             return;
         }
 
         ammoText.text = $"{GetMag(equipped.weaponName)}/{GetReserve(equipped.weaponName)}";
+        UpdateInventoryUI();
+    }
+
+    void UpdateInventoryUI()
+    {
+        if (survivalController == null)
+            return;
+
+        string equippedWeapon = survivalController.GetEquippedWeaponName();
+
+        if (equippedWeaponText != null)
+            equippedWeaponText.text = $"Equipped: {equippedWeapon}";
+
+        if (inventoryListText == null)
+            return;
+
+        IReadOnlyList<string> weapons = survivalController.GetOwnedWeapons();
+        if (weapons == null || weapons.Count == 0)
+        {
+            inventoryListText.text = "Weapons:\n-";
+            return;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.AppendLine("Weapons:");
+
+        for (int i = 0; i < weapons.Count; i++)
+        {
+            string weapon = weapons[i];
+            builder.Append(weapon == equippedWeapon ? "> " : "  ");
+            builder.AppendLine(weapon);
+        }
+
+        inventoryListText.text = builder.ToString().TrimEnd();
     }
 }

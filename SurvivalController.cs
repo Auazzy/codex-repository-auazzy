@@ -221,6 +221,12 @@ public class SurvivalController : MonoBehaviour
         waveRunning = true;
         aliveEnemies = 0;
 
+        if (waveText != null)
+            waveText.gameObject.SetActive(true);
+
+        if (enemiesLeftText != null)
+            enemiesLeftText.gameObject.SetActive(true);
+
         UpdateWaveUI();
         ShowObjective($"Wave {currentWaveIndex + 1} started.");
         PlayWaveMusic(currentWaveIndex);
@@ -321,6 +327,13 @@ public class SurvivalController : MonoBehaviour
     {
         intermissionRunning = true;
         intermissionRemaining = intermissionDuration;
+
+        if (waveText != null)
+            waveText.gameObject.SetActive(false);
+
+        if (enemiesLeftText != null)
+            enemiesLeftText.gameObject.SetActive(false);
+
         SpawnSupplyCrate();
         PlayIntermissionMusic();
         ShowObjective("Intermission started. Find the supply crate.");
@@ -369,6 +382,45 @@ public class SurvivalController : MonoBehaviour
     {
         return weaponOffers;
     }
+    public IReadOnlyList<string> GetOwnedWeapons()
+    {
+        return ownedWeapons;
+    }
+
+    public string GetEquippedWeaponName()
+    {
+        return equippedWeaponName;
+    }
+
+    public void EquipOwnedWeaponByIndex(int index)
+    {
+        if (ownedWeapons.Count == 0)
+            return;
+
+        int wrapped = ((index % ownedWeapons.Count) + ownedWeapons.Count) % ownedWeapons.Count;
+        EquipWeapon(ownedWeapons[wrapped]);
+    }
+
+    public void EquipNextOwnedWeapon()
+    {
+        if (ownedWeapons.Count == 0)
+            return;
+
+        int current = ownedWeapons.IndexOf(equippedWeaponName);
+        int next = current < 0 ? 0 : (current + 1) % ownedWeapons.Count;
+        EquipWeapon(ownedWeapons[next]);
+    }
+
+    public void EquipPreviousOwnedWeapon()
+    {
+        if (ownedWeapons.Count == 0)
+            return;
+
+        int current = ownedWeapons.IndexOf(equippedWeaponName);
+        int previous = current < 0 ? 0 : (current - 1 + ownedWeapons.Count) % ownedWeapons.Count;
+        EquipWeapon(ownedWeapons[previous]);
+    }
+
 
     public bool BuyWeapon(string weaponName)
     {
@@ -376,11 +428,13 @@ public class SurvivalController : MonoBehaviour
         if (offer == null)
             return false;
 
-        if (!TrySpendCoins(offer.cost))
-            return false;
-
         if (!ownedWeapons.Contains(weaponName))
+        {
+            if (!TrySpendCoins(offer.cost))
+                return false;
+
             ownedWeapons.Add(weaponName);
+        }
 
         EquipWeapon(weaponName);
         return true;

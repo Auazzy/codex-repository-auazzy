@@ -39,6 +39,7 @@ public class SurvivalEnemyAI : MonoBehaviour
     public GameObject healthBarRoot;
     public Image healthBarFill;
     public float healthBarVisibleDuration = 5f;
+    public bool alwaysShowHealthBar;
 
     [Header("Movement")]
     public float walkSpeed = 3.5f;
@@ -80,7 +81,10 @@ public class SurvivalEnemyAI : MonoBehaviour
         UpdateHealthBarUI();
 
         if (healthBarRoot != null)
-            healthBarRoot.SetActive(false);
+            healthBarRoot.SetActive(alwaysShowHealthBar);
+
+        if (healthBarRoot != null && healthBarRoot.GetComponent<BillboardUIAlwaysVisible>() == null)
+            healthBarRoot.AddComponent<BillboardUIAlwaysVisible>();
     }
 
     void Start()
@@ -339,7 +343,7 @@ public class SurvivalEnemyAI : MonoBehaviour
 
     void UpdateHealthBarVisibility()
     {
-        if (healthBarRoot == null || !healthBarRoot.activeSelf)
+        if (alwaysShowHealthBar || healthBarRoot == null || !healthBarRoot.activeSelf)
             return;
 
         if (healthBarHideTimer > 0f)
@@ -357,7 +361,7 @@ public class SurvivalEnemyAI : MonoBehaviour
             return;
 
         healthBarRoot.SetActive(true);
-        healthBarHideTimer = healthBarVisibleDuration;
+        healthBarHideTimer = alwaysShowHealthBar ? float.PositiveInfinity : healthBarVisibleDuration;
     }
 
     void UpdateHealthBarUI()

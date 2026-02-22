@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 
 [RequireComponent(typeof(Collider))]
@@ -7,6 +8,8 @@ public class SurvivalSupplyCrate : MonoBehaviour
     [Header("UI")]
     public GameObject indicator;
     public TMP_Text promptText;
+    public GameObject healthBarRoot;
+    public Image healthBarFill;
 
     [Header("Interaction")]
     public float holdDuration = 1.5f;
@@ -17,9 +20,37 @@ public class SurvivalSupplyCrate : MonoBehaviour
     private float holdTimer;
     private bool opened;
 
+    void Awake()
+    {
+        Collider col = GetComponent<Collider>();
+        if (col != null && !col.isTrigger)
+            col.isTrigger = true;
+
+        if (promptText == null)
+            promptText = GetComponentInChildren<TMP_Text>(true);
+
+        if (indicator == null)
+        {
+            Transform indicatorChild = transform.Find("Indicator");
+            if (indicatorChild != null)
+                indicator = indicatorChild.gameObject;
+        }
+
+        if (healthBarRoot != null)
+            healthBarRoot.SetActive(true);
+
+        if (healthBarFill != null)
+            healthBarFill.fillAmount = 1f;
+
+        EnsureBillboard(indicator);
+        EnsureBillboard(promptText != null ? promptText.gameObject : null);
+        EnsureBillboard(healthBarRoot);
+    }
+
     public void Initialize(SurvivalController survivalController)
     {
         controller = survivalController;
+
         if (indicator != null)
             indicator.SetActive(true);
 
@@ -90,6 +121,14 @@ public class SurvivalSupplyCrate : MonoBehaviour
     {
         if (promptText != null)
             promptText.gameObject.SetActive(visible);
+    }
+
+    void EnsureBillboard(GameObject target)
+    {
+        if (target == null || target.GetComponent<BillboardUIAlwaysVisible>() != null)
+            return;
+
+        target.AddComponent<BillboardUIAlwaysVisible>();
     }
 
     public void NotifyShopClosed()
